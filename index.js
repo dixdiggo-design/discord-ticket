@@ -1,4 +1,27 @@
+
 require("dotenv").config();
+
+const http = require("http");
+
+/* =========================================================
+   SERVIDOR HTTP PARA O RENDER
+========================================================= */
+
+const PORT = process.env.PORT || 10000;
+
+http.createServer((req, res) => {
+    res.writeHead(200, {
+        "Content-Type": "text/plain"
+    });
+
+    res.end("Bot online!");
+}).listen(PORT, "0.0.0.0", () => {
+    console.log(`🌐 Servidor HTTP rodando na porta ${PORT}`);
+});
+
+/* =========================================================
+   DISCORD.JS
+========================================================= */
 
 const {
     Client,
@@ -147,29 +170,26 @@ client.on(Events.InteractionCreate, async interaction => {
             const guild = interaction.guild;
             const user = interaction.user;
 
-            /* Verifica ticket existente */
-
             const ticketExistente = guild.channels.cache.find(
                 channel =>
                     channel.type === ChannelType.GuildText &&
-                    channel.name === `ticket-${user.id}`
+                    (
+                        channel.name === `ticket-${user.id}` ||
+                        channel.name === `fechado-${user.id}`
+                    )
             );
 
             if (ticketExistente) {
 
                 await interaction.reply({
                     content:
-                        `❌ Você já possui um ticket aberto!\n\n` +
+                        `❌ Você já possui um ticket aberto ou fechado!\n\n` +
                         `🎫 ${ticketExistente}`,
                     ephemeral: true
                 });
 
                 return;
             }
-
-            /* =================================================
-               CRIA CANAL
-            ================================================= */
 
             const ticket = await guild.channels.create({
 
@@ -181,8 +201,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
                 permissionOverwrites: [
 
-                    /* @everyone */
-
                     {
                         id: guild.roles.everyone.id,
 
@@ -190,8 +208,6 @@ client.on(Events.InteractionCreate, async interaction => {
                             PermissionFlagsBits.ViewChannel
                         ]
                     },
-
-                    /* USUÁRIO */
 
                     {
                         id: user.id,
@@ -205,8 +221,6 @@ client.on(Events.InteractionCreate, async interaction => {
                         ]
                     },
 
-                    /* STAFF */
-
                     {
                         id: process.env.STAFF_ROLE_ID,
 
@@ -218,8 +232,6 @@ client.on(Events.InteractionCreate, async interaction => {
                             PermissionFlagsBits.AttachFiles
                         ]
                     },
-
-                    /* BOT */
 
                     {
                         id: client.user.id,
@@ -237,10 +249,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
             });
 
-            /* =================================================
-               EMBED DO TICKET
-            ================================================= */
-
             const embed = new EmbedBuilder()
 
                 .setColor("#57F287")
@@ -248,108 +256,64 @@ client.on(Events.InteractionCreate, async interaction => {
                 .setTitle("🎫 Ticket Aberto")
 
                 .setDescription(
-
                     `Olá ${user}! 👋\n\n` +
-
                     "Seu atendimento foi criado com sucesso.\n\n" +
-
                     "📋 **Envie sua solicitação abaixo.**\n" +
                     "Explique detalhadamente o que você precisa " +
                     "para que nossa equipe possa ajudar.\n\n" +
-
                     "🔒 **Ticket privado**\n" +
                     "Somente você e nossa equipe possuem acesso.\n\n" +
-
                     "⏱️ Aguarde um membro da equipe responder."
-
                 )
 
                 .addFields({
-
                     name: "👤 Cliente",
-
                     value: `${user}`,
-
                     inline: true
-
                 })
 
                 .addFields({
-
                     name: "🆔 ID",
-
                     value: `${user.id}`,
-
                     inline: true
-
                 })
 
                 .setFooter({
-
                     text: `${guild.name} • Atendimento`
-
                 })
 
                 .setTimestamp();
 
-            /* =================================================
-               BOTÕES
-            ================================================= */
-
             const fechar = new ButtonBuilder()
-
                 .setCustomId("fechar_ticket")
-
                 .setLabel("Fechar Ticket")
-
                 .setEmoji("🔒")
-
                 .setStyle(ButtonStyle.Danger);
 
             const excluir = new ButtonBuilder()
-
                 .setCustomId("excluir_ticket")
-
                 .setLabel("Excluir Ticket")
-
                 .setEmoji("🗑️")
-
                 .setStyle(ButtonStyle.Secondary);
 
             const row = new ActionRowBuilder()
-
                 .addComponents(
                     fechar,
                     excluir
                 );
 
-            /* =================================================
-               MENSAGEM
-            ================================================= */
-
             await ticket.send({
-
                 content:
                     `${user} <@&${process.env.STAFF_ROLE_ID}>`,
-
                 embeds: [embed],
-
                 components: [row]
-
             });
 
-            /* =================================================
-               RESPOSTA AO USUÁRIO
-            ================================================= */
-
             await interaction.reply({
-
                 content:
                     `✅ Seu ticket foi criado com sucesso!\n\n` +
                     `🎫 ${ticket}`,
-
                 ephemeral: true
-
             });
 
             console.log(
@@ -375,35 +339,23 @@ client.on(Events.InteractionCreate, async interaction => {
             ) {
 
                 await interaction.reply({
-
                     content:
                         "❌ Este canal não é um ticket.",
-
                     ephemeral: true
-
                 });
 
                 return;
             }
 
-            /* Muda o nome */
-
-            await interaction.channel.setName(
-
-                `fechado-${interaction.channel.name.replace(
-                    "ticket-",
-                    ""
-                )}`
-
-            );
-
-            /* Remove acesso do usuário */
-
             const usuarioId =
                 interaction.channel.name.replace(
-                    "fechado-",
+                    "ticket-",
                     ""
                 );
+
+            await interaction.channel.setName(
+                `fechado-${usuarioId}`
+            );
 
             try {
 
@@ -424,20 +376,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
             }
 
-            /* Mensagem */
-
             const embed = new EmbedBuilder()
-
                 .setColor("#ED4245")
-
                 .setTitle("🔒 Ticket Fechado")
-
                 .setDescription(
                     "Este ticket foi fechado pela equipe.\n\n" +
                     "🗑️ Utilize **Excluir Ticket** para remover " +
                     "o canal permanentemente."
                 )
-
                 .setTimestamp();
 
             await interaction.channel.send({
@@ -445,12 +391,9 @@ client.on(Events.InteractionCreate, async interaction => {
             });
 
             await interaction.reply({
-
                 content:
                     "🔒 Ticket fechado com sucesso!",
-
                 ephemeral: true
-
             });
 
             console.log("✅ Ticket fechado!");
@@ -475,22 +418,17 @@ client.on(Events.InteractionCreate, async interaction => {
             ) {
 
                 await interaction.reply({
-
                     content:
                         "❌ Este canal não é um ticket.",
-
                     ephemeral: true
-
                 });
 
                 return;
             }
 
             await interaction.reply({
-
                 content:
                     "🗑️ **Ticket será excluído em 3 segundos...**"
-
             });
 
             setTimeout(async () => {
@@ -533,12 +471,9 @@ client.on(Events.InteractionCreate, async interaction => {
             try {
 
                 await interaction.reply({
-
                     content:
                         "❌ Ocorreu um erro ao executar esta ação.",
-
                     ephemeral: true
-
                 });
 
             } catch {}
@@ -600,3 +535,4 @@ client.login(
     console.error(error);
 
 });
+
